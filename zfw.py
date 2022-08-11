@@ -2,11 +2,13 @@ import pandas as pd
 import numpy as np
 import tgfr
 from scipy.stats import norm, t, sem
+import tgfrStat
 
-output_path = "C:\\Users\\peaju\\THAI AIRWAYS INTERNATIONAL PUBLIC CO.,LTD\\DP - PC - Team 1 - Documents\\PC - Team 1\\2022\\python\\dash_board\\output\\"
+#output_path = "C:\\Users\\peaju\\THAI AIRWAYS INTERNATIONAL PUBLIC CO.,LTD\\DP - PC - Team 1 - Documents\\PC - Team 1\\2022\\python\\dash_board\\output\\"
 
 # Load data
-eofp_df_merged = pd.read_json(output_path+'merged_data.json')
+#eofp_df_merged = pd.read_json(output_path+'merged_data.json')
+eofp_df_merged = tgfrStat.load_merged_df()
 report_df = eofp_df_merged[[
     'flight_date',
     'flight_number',
@@ -66,29 +68,25 @@ zfw_df = report_df[['flight_date', 'flight_number','departure_aerodrome', 'zfw_d
 flight_dep = report_df.groupby(['flight_number','departure_aerodrome'])['flight_date'].count()
 total_flight = flight_dep.reset_index()
 
-zfw_df.merge(total_flight, on=['departure_aerodrome','flight_number'])
 zfw_df = zfw_df.merge(total_flight, on=['departure_aerodrome','flight_number']).rename(columns = {'flight_date_y':'total_flight'})
-zfw_df = zfw_df[zfw_df.total_flight < 10]
+zfw_df = zfw_df[zfw_df.total_flight >= 10]
+zfw_df.dropna(inplace=True)
 
-flight_list = flight_dep.index
-report_df = pd.DataFrame()
-for i in flight_list:
-    pct5, pct95 = np.percentile(zfw_df[zfw_df['flight_number'] == flt]['zfw_diff'],[5,95])
-    low, mean, high = mean_confidence_interval(zfw_df[zfw_df['flight_number'] == flt]['zfw_diff'])
+flight_list = zfw_df[['flight_number','departure_aerodrome']].drop_duplicates()
+
+report_df = pd.DataFrame(columns=['low','mean', 'high'],index=flight_list)
+for ind, i in enumerate(report_df.index):
+    flt = i[0]
+    dep = i[1]
+    data = zfw_df[(zfw_df['flight_number'] == flt) & (zfw_df['departure_aerodrome'] == dep)]['zfw_diff']
+    pct5, pct95 = np.percentile(data ,[5,95])
+    low, mean, high = tgfrStat.mean_confidence_interval(data)
     if np.absolute(pct5/low - 1) > 0.1:
         low = pct5
     if np.absolute(pct95/high -1) > 0.1:
         high = pct95
-    df.loc[flt, 'low'] = low
-    df.loc[flt, 'mean'] = mean
-    df.loc[flt, 'high'] = high
+    report_df.iloc[ind, 0] = low
+    report_df.iloc[ind, 1] = mean
+    report_df.iloc[ind, 2] = high
 
-zfw_df.head()    
-# groupped = zfw_df.groupby(['flight_number','departure_aerodrome'])
-# zfw_report = groupped[['flight_date']].count()
-# zfw_report = zfw_report.join(groupped.mean())
-# zfw_report = zfw_report.join(groupped.std(ddof=1), rsuffix='_std')
-# zfw_report.rename(columns={'flight_date':'total_flight', 'zfw_diff':'mean', 'zfw_diff_std':'std'}, inplace = True)
-# zfw_report = zfw_report[zfw_report['total_flight'] > 10]
-# zfw_report.to_json(output_path+'sample_zfw.json')
-# zfw_df.to_json(output_path+'sample_zfw.csv')
+tgfrStat.export_csv(report_df, name='rpt_zfw')
