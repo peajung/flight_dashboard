@@ -96,7 +96,7 @@ def duration_to_hr(duration):
         except:
             return np.nan
 
-def expend_columns(df, col_name):
+def expand_columns(df, col_name):
     return df[col_name].apply(pd.Series)
 
 def extra_fuel(corr, plan_ramp, plan_flt_time, dzfw):

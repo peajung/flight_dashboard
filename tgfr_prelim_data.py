@@ -41,6 +41,68 @@ def load_eofp(n):
 def load_merged_df():
     return pd.read_json(data_path + 'merged_data.json')
 
+def plan_zfw(eofp_df_merged):
+    """extract planned zfw value from merged data frame
+
+    Return
+    ------
+    df[['zfw_plan','zfw_est_eofp']]
+    """
+    # Extract two data frame from merged df
+    fuel_report = tgfr.expand_columns(eofp_df_merged,'fuelreport')
+    eofp = tgfr.expand_columns(eofp_df_merged,'userInput')
+
+    df = eofp_df_merged[['planned_zfw']]
+    df['zfw_plan_fuel_report'] = tgfr.expand_columns(fuel_report,'plan_zfw').astype(float)
+    df['zfw_est_eofp'] = tgfr.expand_columns(eofp,'est_zfw').astype(float)
+
+    # Use plan ZFW data from fuel report 
+    zfw_plan_list = []
+    for i, row in df[['zfw_plan_fuel_report', 'planned_zfw']].iterrows():
+        fuel_report_zfw = row['zfw_plan_fuel_report']
+        planned_zfw = row['planned_zfw']
+        if pd.isna(fuel_report_zfw) and pd.isna(planned_zfw):
+            zfw_plan_list.append(np.nan)
+        elif pd.isna(fuel_report_zfw):
+            zfw_plan_list.append(planned_zfw)
+        else:
+            zfw_plan_list.append(fuel_report_zfw)
+
+    df['zfw_plan'] = zfw_plan_list
+    return df[['zfw_plan', 'zfw_est_eofp']]
+
+def actual_zfw(eofp_df_merged):
+    """extract actual zfw value from merged data frame
+
+    Return
+    ------
+    df[['zfw_plan','zfw_est_eofp']]
+    """
+    # Extract three data frames from merged df
+    fuel_report = tgfr.expand_columns(eofp_df_merged,'fuelreport')
+    eofp = tgfr.expand_columns(eofp_df_merged,'userInput')
+    qar = tgfr.expand_columns(eofp_df_merged,'qar')
+
+    # Create dataframe to compare value
+    zfw_actual_df = pd.DataFrame(
+    {
+        'fuel_report' : fuel_report['actual_zfw'].astype(float),
+        'eofp' : eofp['actual_zfw'],
+        'qar' : qar['zero_fuel_weight']
+    } ,index = eofp_df_merged.index
+    )
+
+    # Replace 0 value to nan the calculate Mean value
+    zfw_actual_df.replace(0, np.nan, inplace=True)
+    zfw_actual_df['mean_value'] =zfw_actual_df.mean(axis=1)
+
+    zfw_actual_list = []
+    for i, row in zfw_actual_df.iterrows():
+        values_list = [row['fuel_report'], row['eofp'], row['qar']]
+        mean_value = row['mean_value']
+        zfw_actual_list.append(tgfr.compare_and_choose(values_list, mean_value))
+    return pd.DataFrame({'zfw_actual':zfw_actual_list},index=eofp_df_merged.index)
+
 def export_csv(df, name):
     df.to_csv(output_path + name +'.csv')
 
